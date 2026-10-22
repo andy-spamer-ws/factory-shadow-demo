@@ -37,3 +37,9 @@ def remove(data: dict, item_id: int) -> tuple[dict, dict]:
 def open_items(data: dict) -> list:
     """Return copies of the not-done items in their original order."""
     return [dict(item) for item in data["items"] if not item["done"]]
+
+
+def counts(data: dict) -> tuple[int, int]:
+    """Return (open, done) totals for the items."""
+    done = sum(1 for item in data["items"] if item["done"])
+    return len(data["items"]) - done, done
