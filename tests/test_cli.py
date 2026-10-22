@@ -1,11 +1,15 @@
 """Tests for the todo command-line interface in todo.__main__."""
 
+import contextlib
+import importlib
+import io
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -196,6 +200,89 @@ class CliCorruptFileTest(unittest.TestCase):
         )
 
 
+class CliCountTest(unittest.TestCase):
+    def test_count_reports_open_and_done_without_writing_and_rejects_corrupt_file(self):
+        observed = []
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh_file = os.path.join(tmp, "fresh.json")
+            fresh = run_cli("count", env={**os.environ, "TODO_FILE": fresh_file})
+            observed.append((fresh.returncode, fresh.stdout, fresh.stderr, os.path.exists(fresh_file)))
+
+            todo_file = os.path.join(tmp, "todo.json")
+            env = {**os.environ, "TODO_FILE": todo_file}
+            for command in (("add", "a"), ("add", "b"), ("done", "1")):
+                result = run_cli(*command, env=env)
+                assert result.returncode == 0, result.stderr
+            bytes_before = Path(todo_file).read_bytes()
+            counted = run_cli("count", env=env)
+            bytes_after = Path(todo_file).read_bytes()
+            observed.append((counted.returncode, counted.stdout, counted.stderr, bytes_before == bytes_after))
+
+            corrupt_file = os.path.join(tmp, "corrupt.json")
+            Path(corrupt_file).write_bytes(b"not json")
+            corrupt = run_cli("count", env={**os.environ, "TODO_FILE": corrupt_file})
+            observed.append(
+                (corrupt.returncode, corrupt.stdout, corrupt.stderr, Path(corrupt_file).read_bytes())
+            )
+
+        self.assertEqual(
+            observed,
+            [
+                (0, "0 open, 0 done\n", "", False),
+                (0, "1 open, 1 done\n", "", True),
+                (2, "", f"error: {corrupt_file} is not a valid todo file\n", b"not json"),
+            ],
+        )
+
+    def test_count_on_persisted_empty_file_reports_zero_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            todo_file = os.path.join(tmp, "todo.json")
+            Path(todo_file).write_text('{"next_id": 1, "items": []}', encoding="utf-8")
+            result = run_cli("count", env={**os.environ, "TODO_FILE": todo_file})
+
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "0 open, 0 done\n", ""))
+
+
+class CliCountNoWriteTest(unittest.TestCase):
+    def test_count_on_existing_file_never_calls_store_save(self):
+        cli = importlib.import_module("todo.__main__")
+        with tempfile.TemporaryDirectory() as tmp:
+            todo_file = os.path.join(tmp, "todo.json")
+            Path(todo_file).write_text(
+                '{"next_id": 3, "items": [{"id": 1, "text": "a", "done": true}, '
+                '{"id": 2, "text": "b", "done": false}]}',
+                encoding="utf-8",
+            )
+            with mock.patch.dict(os.environ, {"TODO_FILE": todo_file}), mock.patch(
+                "todo.store.save"
+            ) as save_spy, contextlib.redirect_stdout(io.StringIO()):
+                exit_code = cli.main(["count"])
+
+        self.assertEqual((exit_code, save_spy.call_count), (0, 0))
+
+
+class CliCountDelegatesTest(unittest.TestCase):
+    def test_count_prints_result_of_items_counts_for_loaded_data(self):
+        cli = importlib.import_module("todo.__main__")
+        with tempfile.TemporaryDirectory() as tmp:
+            todo_file = os.path.join(tmp, "todo.json")
+            Path(todo_file).write_text(
+                '{"next_id": 2, "items": [{"id": 1, "text": "a", "done": false}]}',
+                encoding="utf-8",
+            )
+            buf = io.StringIO()
+            with mock.patch.dict(os.environ, {"TODO_FILE": todo_file}), mock.patch(
+                "todo.items.counts", return_value=(7, 42)
+            ) as counts_spy, contextlib.redirect_stdout(buf):
+                exit_code = cli.main(["count"])
+
+        call_args = counts_spy.call_args.args if counts_spy.call_args is not None else None
+        self.assertEqual(
+            (exit_code, buf.getvalue(), call_args),
+            (0, "7 open, 42 done\n", ({"next_id": 2, "items": [{"id": 1, "text": "a", "done": False}]},)),
+        )
+
+
 class CliNoLockFileTest(unittest.TestCase):
     def test_add_done_remove_create_no_lock_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -207,3 +294,15 @@ class CliNoLockFileTest(unittest.TestCase):
             listing = sorted(os.listdir(tmp))
 
         self.assertEqual(listing, ["todo.json"])
+
+
+class ReadmeTodoSectionTest(unittest.TestCase):
+    def test_readme_todo_section_mentions_count_in_one_line(self):
+        lines = (REPO_ROOT / "README.md").read_text(encoding="utf-8").splitlines()
+        start = lines.index("## To-do list") + 1
+        end = next(
+            (i for i in range(start, len(lines)) if lines[i].startswith("## ")),
+            len(lines),
+        )
+        todo_section_lines = lines[start:end]
+        self.assertEqual(sum("python3 -m todo count" in line for line in todo_section_lines), 1)

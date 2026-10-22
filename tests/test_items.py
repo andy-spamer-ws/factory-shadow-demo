@@ -92,5 +92,27 @@ class RemoveTest(unittest.TestCase):
         )
 
 
+class CountsTest(unittest.TestCase):
+    def test_counts_returns_open_and_done_totals_and_keeps_input(self):
+        import copy
+
+        from todo import items
+
+        state = {"next_id": 1, "items": []}
+        state, _ = items.add(state, "a")
+        state, _ = items.add(state, "b")
+        state, _ = items.add(state, "c")
+        state, _ = items.mark_done(state, 2)
+
+        state_before = copy.deepcopy(state)
+        built_counts = items.counts(state)
+        state_after = state
+
+        self.assertEqual(
+            (items.counts({"next_id": 1, "items": []}), built_counts, state_after == state_before),
+            ((0, 0), (2, 1), True),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
