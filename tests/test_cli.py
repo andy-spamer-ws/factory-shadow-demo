@@ -261,6 +261,28 @@ class CliCountNoWriteTest(unittest.TestCase):
         self.assertEqual((exit_code, save_spy.call_count), (0, 0))
 
 
+class CliCountDelegatesTest(unittest.TestCase):
+    def test_count_prints_result_of_items_counts_for_loaded_data(self):
+        cli = importlib.import_module("todo.__main__")
+        with tempfile.TemporaryDirectory() as tmp:
+            todo_file = os.path.join(tmp, "todo.json")
+            Path(todo_file).write_text(
+                '{"next_id": 2, "items": [{"id": 1, "text": "a", "done": false}]}',
+                encoding="utf-8",
+            )
+            buf = io.StringIO()
+            with mock.patch.dict(os.environ, {"TODO_FILE": todo_file}), mock.patch(
+                "todo.items.counts", return_value=(7, 42)
+            ) as counts_spy, contextlib.redirect_stdout(buf):
+                exit_code = cli.main(["count"])
+
+        call_args = counts_spy.call_args.args if counts_spy.call_args is not None else None
+        self.assertEqual(
+            (exit_code, buf.getvalue(), call_args),
+            (0, "7 open, 42 done\n", ({"next_id": 2, "items": [{"id": 1, "text": "a", "done": False}]},)),
+        )
+
+
 class CliNoLockFileTest(unittest.TestCase):
     def test_add_done_remove_create_no_lock_file(self):
         with tempfile.TemporaryDirectory() as tmp:
