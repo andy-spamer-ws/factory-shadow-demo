@@ -1,0 +1,76 @@
+# Requests a GitHub Copilot code review on every pull request into main,
+# then waits for the review and records it in the job summary.
+# Uses the COPILOT_REVIEW_TOKEN secret when set (a token for a user with a
+# Copilot licence), otherwise the workflow's own token.
+name: Copilot code review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+    branches: [main]
+
+concurrency:
+  group: copilot-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  GH_TOKEN: ${{ secrets.COPILOT_REVIEW_TOKEN || github.token }}
+  REPO: ${{ github.repository }}
+  PR: ${{ github.event.pull_request.number }}
+  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+  COPILOT_LOGIN: copilot-pull-request-reviewer[bot]
+
+jobs:
+  review:
+    name: Copilot code review
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Request review from Copilot
+        id: request
+        run: |
+          # Earlier Copilot reviews must not satisfy the wait for this request.
+          baseline=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
+            --jq ".[] | select(.user.login == \"$COPILOT_LOGIN\") | .id" | sort -n | tail -1)
+          echo "baseline=${baseline:-0}" >> "$GITHUB_OUTPUT"
+          gh api -X POST "repos/$REPO/pulls/$PR/requested_reviewers" \
+            -f "reviewers[]=$COPILOT_LOGIN" --silent
+          echo "Requested Copilot review on PR #$PR at $HEAD_SHA"
+
+      - name: Wait for the review
+        id: wait
+        env:
+          BASELINE: ${{ steps.request.outputs.baseline }}
+        run: |
+          for _ in $(seq 1 60); do
+            review=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
+              --jq ".[] | select(.user.login == \"$COPILOT_LOGIN\" and .id > $BASELINE) | {id, state, html_url}" | tail -1)
+            if [ -n "$review" ]; then
+              echo "review=$review" >> "$GITHUB_OUTPUT"
+              echo "Copilot review received: $review"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::No Copilot review on $HEAD_SHA after 10 minutes"
+          exit 1
+
+      - name: Summarise the review
+        env:
+          REVIEW: ${{ steps.wait.outputs.review }}
+        run: |
+          id=$(jq -r .id <<< "$REVIEW")
+          url=$(jq -r .html_url <<< "$REVIEW")
+          comments=$(gh api "repos/$REPO/pulls/$PR/reviews/$id/comments" --paginate --jq length | awk '{s+=$1} END {print s+0}')
+          {
+            echo "## Copilot code review"
+            echo "| PR | Commit | Comments | Review |"
+            echo "| --- | --- | --- | --- |"
+            echo "| #$PR | \`${HEAD_SHA::7}\` | $comments | [open]($url) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Copilot left $comments comment(s): $url"

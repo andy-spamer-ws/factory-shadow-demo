@@ -1,0 +1,115 @@
+# Simulated deployment. Runs after the test suite passes on main (that is,
+# after a merge) or on demand. Records a real GitHub deployment against the
+# chosen environment, but no infrastructure is touched.
+name: Deploy (simulated)
+
+on:
+  workflow_run:
+    workflows: [Test suite]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, staging, production]
+        default: dev
+      simulate_failure:
+        description: Fail the smoke test on purpose
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-${{ inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  VERSION: 0.1.${{ github.run_number }}
+
+jobs:
+  build:
+    name: Build release
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+      - name: Build artifact (simulated)
+        run: |
+          mkdir -p dist
+          for step in "Resolving dependencies" "Compiling" "Bundling assets" "Packaging"; do
+            echo "$step..."
+            sleep 3
+          done
+          jq -n --arg version "$VERSION" --arg sha "$DEPLOY_SHA" --arg built "$(date -u +%FT%TZ)" \
+            '{version: $version, sha: $sha, built_at: $built}' > dist/release.json
+          cat dist/release.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ env.VERSION }}
+          path: dist/
+          retention-days: 7
+
+  deploy:
+    name: Deploy to ${{ inputs.environment || 'dev' }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment || 'dev' }}
+      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ env.VERSION }}
+          path: dist/
+      - name: Roll out (simulated)
+        run: |
+          echo "Deploying $(jq -r .version dist/release.json) ($(jq -r .sha dist/release.json | cut -c1-7)) to ${{ inputs.environment || 'dev' }}"
+          for instance in 1 2 3; do
+            echo "instance-$instance: draining"; sleep 2
+            echo "instance-$instance: updated"; sleep 2
+            echo "instance-$instance: healthy"
+          done
+          echo "Rollout complete"
+
+  smoke-test:
+    name: Smoke test
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check endpoints (simulated)
+        env:
+          SIMULATE_FAILURE: ${{ inputs.simulate_failure || false }}
+        run: |
+          for path in /health /ready /api/version /api/status; do
+            sleep 2
+            if [ "$SIMULATE_FAILURE" = "true" ] && [ "$path" = "/api/status" ]; then
+              echo "::error::GET $path returned 503 (simulated)"
+              exit 1
+            fi
+            echo "GET $path 200"
+          done
+
+  summary:
+    name: Deployment summary
+    if: always() && needs.build.result != 'skipped'
+    needs: [build, deploy, smoke-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write summary
+        run: |
+          {
+            echo "## Deployment"
+            echo "| Environment | Version | Commit | Build | Deploy | Smoke test |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            echo "| ${{ inputs.environment || 'dev' }} | $VERSION | \`${DEPLOY_SHA::7}\` | ${{ needs.build.result }} | ${{ needs.deploy.result }} | ${{ needs['smoke-test'].result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "${{ needs['smoke-test'].result }}" = "success" ]

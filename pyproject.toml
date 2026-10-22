@@ -1,0 +1,23 @@
+[project]
+name = "factory-demo-inventory"
+version = "0.1.0"
+description = "Small inventory report used to demo issue-driven delivery."
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "coverage>=7.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+branch = true
+source = ["inventory"]

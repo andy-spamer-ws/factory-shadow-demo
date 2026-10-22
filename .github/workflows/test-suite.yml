@@ -1,0 +1,85 @@
+# Simulated test pipeline. Nothing real is tested; each stage prints test
+# results and takes a few seconds so the run looks like a real pipeline.
+name: Test suite
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      fail_stage:
+        description: Stage to fail on purpose, to demo a red pipeline
+        type: choice
+        options: [none, lint, unit, integration, e2e]
+        default: none
+
+concurrency:
+  group: test-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FAIL_STAGE: ${{ inputs.fail_stage || 'none' }}
+
+jobs:
+  lint:
+    name: Lint and type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/simulate-tests.sh lint "Lint and type-check" 12 6
+
+  unit:
+    name: Unit tests (${{ matrix.runtime }})
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [python-3.12, node-22]
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/simulate-tests.sh unit "Unit tests (${{ matrix.runtime }})" 40 15
+
+  integration:
+    name: Integration tests
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/simulate-tests.sh integration "Integration tests" 15 20
+
+  e2e:
+    name: End-to-end tests
+    needs: integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/simulate-tests.sh e2e "End-to-end tests" 8 20
+
+  report:
+    name: Test report
+    if: always()
+    needs: [lint, unit, integration, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarise results
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          {
+            echo "## Test suite"
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<< "$RESULTS"
+          } >> "$GITHUB_STEP_SUMMARY"
+          bad=$(jq -r '[.[] | select(.result != "success")] | length' <<< "$RESULTS")
+          if [ "$bad" -ne 0 ]; then
+            echo "::error::$bad test job(s) did not succeed"
+            exit 1
+          fi
+          echo "All test jobs passed"
