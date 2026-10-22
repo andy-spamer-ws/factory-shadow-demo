@@ -141,6 +141,16 @@ class IsValidTest(unittest.TestCase):
             with self.subTest(x=x):
                 self.assertIs(roman.is_valid(x), False)
 
+    def test_readme_roman_section_mentions_is_valid_in_one_line(self):
+        lines = (REPO_ROOT / "README.md").read_text(encoding="utf-8").splitlines()
+        start = lines.index("## Roman numeral converter") + 1
+        end = next(
+            (i for i in range(start, len(lines)) if lines[i].startswith("## ")),
+            len(lines),
+        )
+        roman_section_lines = lines[start:end]
+        self.assertEqual(sum("is_valid" in line for line in roman_section_lines), 1)
+
 
 class CliTest(unittest.TestCase):
     def test_cli_converts_numbers_and_numerals(self):

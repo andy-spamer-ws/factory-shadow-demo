@@ -10,6 +10,8 @@ python3 -m roman 4000      # prints "error: number must be between 1 and 3999" t
 
 Invalid input prints one `error:` line to stderr and exits with status 2.
 
+In code, `roman.is_valid(s)` returns `True` or `False` and never raises.
+
 Run the tests:
 
 ```sh
