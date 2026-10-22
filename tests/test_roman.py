@@ -73,6 +73,85 @@ class FromRomanTest(unittest.TestCase):
                     roman.from_roman(s)
 
 
+class IsValidTest(unittest.TestCase):
+    def test_is_valid_accepts_any_letter_case(self):
+        import roman
+
+        for s in ("MCMXCIV", "mcmxciv", "McMxCiV"):
+            with self.subTest(s=s):
+                self.assertIs(roman.is_valid(s), True)
+
+    def test_is_valid_accepts_every_numeral_to_roman_produces(self):
+        import roman
+
+        for n in range(1, 4000):
+            with self.subTest(n=n):
+                self.assertIs(roman.is_valid(roman.to_roman(n)), True)
+
+    def test_is_valid_rejects_invalid_numerals(self):
+        import roman
+
+        for s in ("", "   ", "IIII", "MMMM", "ABC"):
+            with self.subTest(s=s):
+                self.assertIs(roman.is_valid(s), False)
+
+    def test_is_valid_rejects_padded_numerals(self):
+        import roman
+
+        for s in (" XIV", "XIV ", "XIV\n"):
+            with self.subTest(s=s):
+                self.assertIs(roman.is_valid(s), False)
+
+    def test_is_valid_agrees_with_from_roman(self):
+        import roman
+
+        def from_roman_accepts(s):
+            try:
+                roman.from_roman(s)
+            except ValueError:
+                return False
+            return True
+
+        for s in (
+            "MCMXCIV",
+            "mcmxciv",
+            "McMxCiV",
+            "XIV",
+            "MMMCMXCIX",
+            "VX",
+            "IC",
+            "IL",
+            "VV",
+            "IIII",
+            "MMMM",
+            "ABC",
+            "\u0131v",
+            "",
+            "   ",
+            " XIV",
+            "XIV\n",
+        ):
+            with self.subTest(s=s):
+                self.assertEqual(roman.is_valid(s), from_roman_accepts(s))
+
+    def test_is_valid_returns_false_for_non_string_input(self):
+        import roman
+
+        for x in (None, 5, 3.5, b"XIV", b"", ["X"]):
+            with self.subTest(x=x):
+                self.assertIs(roman.is_valid(x), False)
+
+    def test_readme_roman_section_mentions_is_valid_in_one_line(self):
+        lines = (REPO_ROOT / "README.md").read_text(encoding="utf-8").splitlines()
+        start = lines.index("## Roman numeral converter") + 1
+        end = next(
+            (i for i in range(start, len(lines)) if lines[i].startswith("## ")),
+            len(lines),
+        )
+        roman_section_lines = lines[start:end]
+        self.assertEqual(sum("is_valid" in line for line in roman_section_lines), 1)
+
+
 class CliTest(unittest.TestCase):
     def test_cli_converts_numbers_and_numerals(self):
         cases = (

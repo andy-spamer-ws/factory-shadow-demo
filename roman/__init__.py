@@ -51,3 +51,14 @@ def from_roman(s: str) -> int:
     if total < 1 or total > 3999 or to_roman(total) != upper:
         raise ValueError(f"invalid Roman numeral: {s!r}")
     return total
+
+
+def is_valid(s: str) -> bool:
+    """Return True if s is a Roman numeral that from_roman accepts."""
+    if not isinstance(s, str):
+        return False
+    try:
+        from_roman(s)
+    except ValueError:
+        return False
+    return True
