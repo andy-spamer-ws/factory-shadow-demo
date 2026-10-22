@@ -1,11 +1,15 @@
 """Tests for the todo command-line interface in todo.__main__."""
 
+import contextlib
+import importlib
+import io
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -237,6 +241,24 @@ class CliCountTest(unittest.TestCase):
             result = run_cli("count", env={**os.environ, "TODO_FILE": todo_file})
 
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "0 open, 0 done\n", ""))
+
+
+class CliCountNoWriteTest(unittest.TestCase):
+    def test_count_on_existing_file_never_calls_store_save(self):
+        cli = importlib.import_module("todo.__main__")
+        with tempfile.TemporaryDirectory() as tmp:
+            todo_file = os.path.join(tmp, "todo.json")
+            Path(todo_file).write_text(
+                '{"next_id": 3, "items": [{"id": 1, "text": "a", "done": true}, '
+                '{"id": 2, "text": "b", "done": false}]}',
+                encoding="utf-8",
+            )
+            with mock.patch.dict(os.environ, {"TODO_FILE": todo_file}), mock.patch(
+                "todo.store.save"
+            ) as save_spy, contextlib.redirect_stdout(io.StringIO()):
+                exit_code = cli.main(["count"])
+
+        self.assertEqual((exit_code, save_spy.call_count), (0, 0))
 
 
 class CliNoLockFileTest(unittest.TestCase):
