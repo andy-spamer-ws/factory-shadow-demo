@@ -28,6 +28,7 @@ python3 -m todo add "buy milk"   # prints "added 1: buy milk"
 python3 -m todo done 1           # prints "done 1: buy milk"
 python3 -m todo list             # prints "1 [x] buy milk"
 python3 -m todo list --open      # lists only items not yet done
+python3 -m todo count            # prints "0 open, 1 done"
 python3 -m todo remove 1         # prints "removed 1: buy milk"
 ```
 

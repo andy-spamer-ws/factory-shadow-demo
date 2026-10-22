@@ -242,3 +242,15 @@ class CliNoLockFileTest(unittest.TestCase):
             listing = sorted(os.listdir(tmp))
 
         self.assertEqual(listing, ["todo.json"])
+
+
+class ReadmeTodoSectionTest(unittest.TestCase):
+    def test_readme_todo_section_mentions_count_in_one_line(self):
+        lines = (REPO_ROOT / "README.md").read_text(encoding="utf-8").splitlines()
+        start = lines.index("## To-do list") + 1
+        end = next(
+            (i for i in range(start, len(lines)) if lines[i].startswith("## ")),
+            len(lines),
+        )
+        todo_section_lines = lines[start:end]
+        self.assertEqual(sum("python3 -m todo count" in line for line in todo_section_lines), 1)
