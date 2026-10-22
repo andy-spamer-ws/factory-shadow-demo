@@ -88,6 +88,52 @@ class IsValidTest(unittest.TestCase):
             with self.subTest(n=n):
                 self.assertIs(roman.is_valid(roman.to_roman(n)), True)
 
+    def test_is_valid_rejects_invalid_numerals(self):
+        import roman
+
+        for s in ("", "   ", "IIII", "MMMM", "ABC"):
+            with self.subTest(s=s):
+                self.assertIs(roman.is_valid(s), False)
+
+    def test_is_valid_rejects_padded_numerals(self):
+        import roman
+
+        for s in (" XIV", "XIV ", "XIV\n"):
+            with self.subTest(s=s):
+                self.assertIs(roman.is_valid(s), False)
+
+    def test_is_valid_agrees_with_from_roman(self):
+        import roman
+
+        def from_roman_accepts(s):
+            try:
+                roman.from_roman(s)
+            except ValueError:
+                return False
+            return True
+
+        for s in (
+            "MCMXCIV",
+            "mcmxciv",
+            "McMxCiV",
+            "XIV",
+            "MMMCMXCIX",
+            "VX",
+            "IC",
+            "IL",
+            "VV",
+            "IIII",
+            "MMMM",
+            "ABC",
+            "\u0131v",
+            "",
+            "   ",
+            " XIV",
+            "XIV\n",
+        ):
+            with self.subTest(s=s):
+                self.assertEqual(roman.is_valid(s), from_roman_accepts(s))
+
 
 class CliTest(unittest.TestCase):
     def test_cli_converts_numbers_and_numerals(self):
