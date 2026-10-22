@@ -40,6 +40,7 @@ def main(argv=None) -> int:
     remove_parser.add_argument("id", type=_item_id)
     list_parser = sub.add_parser("list")
     list_parser.add_argument("--open", action="store_true")
+    sub.add_parser("count")
     args = parser.parse_args(argv)
 
     path = store.todo_path()
@@ -57,6 +58,11 @@ def _run(args, path: str) -> int:
         for item in rows:
             mark = "x" if item["done"] else " "
             print(f"{item['id']} [{mark}] {item['text']}")
+        return 0
+
+    if args.command == "count":
+        open_count, done_count = items.counts(data)
+        print(f"{open_count} open, {done_count} done")
         return 0
 
     try:

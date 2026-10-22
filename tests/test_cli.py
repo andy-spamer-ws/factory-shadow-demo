@@ -196,6 +196,41 @@ class CliCorruptFileTest(unittest.TestCase):
         )
 
 
+class CliCountTest(unittest.TestCase):
+    def test_count_reports_open_and_done_without_writing_and_rejects_corrupt_file(self):
+        observed = []
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh_file = os.path.join(tmp, "fresh.json")
+            fresh = run_cli("count", env={**os.environ, "TODO_FILE": fresh_file})
+            observed.append((fresh.returncode, fresh.stdout, fresh.stderr, os.path.exists(fresh_file)))
+
+            todo_file = os.path.join(tmp, "todo.json")
+            env = {**os.environ, "TODO_FILE": todo_file}
+            for command in (("add", "a"), ("add", "b"), ("done", "1")):
+                result = run_cli(*command, env=env)
+                assert result.returncode == 0, result.stderr
+            bytes_before = Path(todo_file).read_bytes()
+            counted = run_cli("count", env=env)
+            bytes_after = Path(todo_file).read_bytes()
+            observed.append((counted.returncode, counted.stdout, counted.stderr, bytes_before == bytes_after))
+
+            corrupt_file = os.path.join(tmp, "corrupt.json")
+            Path(corrupt_file).write_bytes(b"not json")
+            corrupt = run_cli("count", env={**os.environ, "TODO_FILE": corrupt_file})
+            observed.append(
+                (corrupt.returncode, corrupt.stdout, corrupt.stderr, Path(corrupt_file).read_bytes())
+            )
+
+        self.assertEqual(
+            observed,
+            [
+                (0, "0 open, 0 done\n", "", False),
+                (0, "1 open, 1 done\n", "", True),
+                (2, "", f"error: {corrupt_file} is not a valid todo file\n", b"not json"),
+            ],
+        )
+
+
 class CliNoLockFileTest(unittest.TestCase):
     def test_add_done_remove_create_no_lock_file(self):
         with tempfile.TemporaryDirectory() as tmp:
