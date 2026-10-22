@@ -230,6 +230,14 @@ class CliCountTest(unittest.TestCase):
             ],
         )
 
+    def test_count_on_persisted_empty_file_reports_zero_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            todo_file = os.path.join(tmp, "todo.json")
+            Path(todo_file).write_text('{"next_id": 1, "items": []}', encoding="utf-8")
+            result = run_cli("count", env={**os.environ, "TODO_FILE": todo_file})
+
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "0 open, 0 done\n", ""))
+
 
 class CliNoLockFileTest(unittest.TestCase):
     def test_add_done_remove_create_no_lock_file(self):
