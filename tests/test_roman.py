@@ -73,6 +73,22 @@ class FromRomanTest(unittest.TestCase):
                     roman.from_roman(s)
 
 
+class IsValidTest(unittest.TestCase):
+    def test_is_valid_accepts_any_letter_case(self):
+        import roman
+
+        for s in ("MCMXCIV", "mcmxciv", "McMxCiV"):
+            with self.subTest(s=s):
+                self.assertIs(roman.is_valid(s), True)
+
+    def test_is_valid_accepts_every_numeral_to_roman_produces(self):
+        import roman
+
+        for n in range(1, 4000):
+            with self.subTest(n=n):
+                self.assertIs(roman.is_valid(roman.to_roman(n)), True)
+
+
 class CliTest(unittest.TestCase):
     def test_cli_converts_numbers_and_numerals(self):
         cases = (
