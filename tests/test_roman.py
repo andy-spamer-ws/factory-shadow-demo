@@ -134,6 +134,13 @@ class IsValidTest(unittest.TestCase):
             with self.subTest(s=s):
                 self.assertEqual(roman.is_valid(s), from_roman_accepts(s))
 
+    def test_is_valid_returns_false_for_non_string_input(self):
+        import roman
+
+        for x in (None, 5, 3.5, b"XIV", b"", ["X"]):
+            with self.subTest(x=x):
+                self.assertIs(roman.is_valid(x), False)
+
 
 class CliTest(unittest.TestCase):
     def test_cli_converts_numbers_and_numerals(self):

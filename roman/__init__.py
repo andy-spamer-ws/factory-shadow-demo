@@ -55,6 +55,8 @@ def from_roman(s: str) -> int:
 
 def is_valid(s: str) -> bool:
     """Return True if s is a Roman numeral that from_roman accepts."""
+    if not isinstance(s, str):
+        return False
     try:
         from_roman(s)
     except ValueError:
